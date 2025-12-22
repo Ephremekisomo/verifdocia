@@ -11,8 +11,17 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration Tesseract (Windows)
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Configuration Tesseract
+# Sur Windows, on utilise le chemin fourni par l'utilisateur. 
+# Sur Render (Linux), Tesseract sera dans le PATH après l'installation via Docker.
+import os
+TESSERACT_PATH = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+if os.path.exists(TESSERACT_PATH):
+    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+else:
+    # Sur Linux, tesseract est généralement dans /usr/bin/tesseract
+    # Si on ne définit rien, pytesseract le cherche dans le PATH
+    pass
 
 app = FastAPI(title="Fake Document Detection API", version="0.1.0")
 
