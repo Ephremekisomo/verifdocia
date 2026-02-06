@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import FileUpload from './components/FileUpload'
+import CameraScanner from './components/CameraScanner'
 
 function App() {
   const [analysisResult, setAnalysisResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   const handleFileSelect = async (file) => {
     setLoading(true)
@@ -35,6 +37,19 @@ function App() {
     }
   }
 
+  useEffect(() => {
+    if (!analysisResult) return
+    const p = analysisResult.is_authentic_probability
+    let text = ''
+    if (p <= 0.4) text = "Le document n'est pas conforme"
+    else if (p <= 0.7) text = 'Le document est douteux'
+    else text = 'Le document semble authentique'
+    const utter = new SpeechSynthesisUtterance(text)
+    utter.lang = 'fr-FR'
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utter)
+  }, [analysisResult])
+
   return (
     <div className="container">
       <header style={{ marginBottom: '3rem' }}>
@@ -48,8 +63,22 @@ function App() {
 
       <main>
         {!analysisResult && !loading && (
-          <div className="fade-in">
+          <div className="fade-in" style={{ display: 'grid', gap: '1rem', justifyItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button onClick={() => setScannerOpen(true)}>Scanner</button>
+              <button onClick={() => document.getElementById('file-upload').click()}>Importer une image</button>
+            </div>
             <FileUpload onFileSelect={handleFileSelect} />
+            {scannerOpen && (
+              <CameraScanner
+                onCapture={(blob) => {
+                  const file = new File([blob], 'scan.png', { type: 'image/png' })
+                  handleFileSelect(file)
+                  setScannerOpen(false)
+                }}
+                onClose={() => setScannerOpen(false)}
+              />
+            )}
           </div>
         )}
 
@@ -142,6 +171,29 @@ function App() {
                 {analysisResult.details.ocr_text_preview}
               </div>
             </div>
+
+            {analysisResult.details.research && (
+              <div style={{ marginTop: '2rem' }}>
+                <h4 style={{ color: 'var(--text-secondary)' }}>Recherche heuristique</h4>
+                <ul style={{ listStyle: 'none', padding: 0 }}>
+                  <li style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--glass-border)' }}>
+                    <strong>Type:</strong> {analysisResult.details.research.doc_type || 'Indéterminé'}
+                  </li>
+                  <li style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--glass-border)' }}>
+                    <strong>Émetteur:</strong> {analysisResult.details.research.issuer || 'Indéterminé'}
+                  </li>
+                  <li style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--glass-border)' }}>
+                    <strong>Numéros:</strong> {analysisResult.details.research.id_numbers?.length ? analysisResult.details.research.id_numbers.join(', ') : 'Aucun'}
+                  </li>
+                  <li style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--glass-border)' }}>
+                    <strong>Dates:</strong> {analysisResult.details.research.dates?.length ? analysisResult.details.research.dates.join(', ') : 'Aucune'}
+                  </li>
+                  <li style={{ padding: '0.5rem 0' }}>
+                    <strong>Années:</strong> {analysisResult.details.research.years?.length ? analysisResult.details.research.years.join(', ') : 'Aucune'}
+                  </li>
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </main>

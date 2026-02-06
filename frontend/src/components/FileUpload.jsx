@@ -4,6 +4,19 @@ export default function FileUpload({ onFileSelect }) {
   const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState(null);
 
+  const handleFile = useCallback((file) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Veuillez uploader une image valide (JPG, PNG).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+    onFileSelect(file);
+  }, [onFileSelect]);
+
   const handleDrag = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -23,28 +36,13 @@ export default function FileUpload({ onFileSelect }) {
       const file = e.dataTransfer.files[0];
       handleFile(file);
     }
-  }, []);
+  }, [handleFile]);
 
   const handleChange = (e) => {
     e.preventDefault();
     if (e.target.files && e.target.files[0]) {
       handleFile(e.target.files[0]);
     }
-  };
-
-  const handleFile = (file) => {
-    if (!file.type.startsWith('image/')) {
-      alert('Veuillez uploader une image valide (JPG, PNG).');
-      return;
-    }
-    
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPreview(reader.result);
-    };
-    reader.readAsDataURL(file);
-    
-    onFileSelect(file);
   };
 
   return (

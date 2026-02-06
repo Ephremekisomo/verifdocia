@@ -40,39 +40,28 @@ def read_root():
 
 @app.post("/analyze")
 async def analyze_document(file: UploadFile = File(...)):
-    """
-    Endpoint principal pour analyser un document uploadé.
-    """
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Le fichier doit être une image.")
 
     try:
-        # Lecture du fichier image
         contents = await file.read()
         image_stream = io.BytesIO(contents)
         image = Image.open(image_stream)
         
-        # 1. Analyse OCR basique (Extraction de texte)
-        # Note: Assurez-vous que Tesseract est installé sur le système hôte
         try:
             extracted_text = pytesseract.image_to_string(image, lang='fra+eng')
         except Exception as e:
             logger.error(f"Erreur Tesseract: {e}")
             extracted_text = "Erreur OCR ou Tesseract non installé."
 
-        # 2. Analyse heuristique simple
-        # Conversion pour OpenCV
         np_image = np.array(image)
-        # Convertir RGB à BGR pour OpenCV (si nécessaire)
         open_cv_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2BGR)
         
-        # Détection de flou (Variance de Laplacian)
         gray = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
         blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
         
         is_blurry = bool(blur_score < 100.0)
 
-        # 3. Analyse des Métadonnées (EXIF)
         exif_data = image._getexif()
         software_detected = None
         is_edited = False
@@ -87,7 +76,6 @@ async def analyze_document(file: UploadFile = File(...)):
                         is_edited = True
                         break
         
-        # Recherche de mots clés suspects ou attendus
         keywords_found = []
         suspicious_keywords = ["specimen", "exemple", "non officiel"]
         official_keywords = ["république", "diplôme", "certificat", "ministère"]
@@ -100,18 +88,53 @@ async def analyze_document(file: UploadFile = File(...)):
                 
         is_suspicious = any(word in text_lower for word in suspicious_keywords)
 
-        # Construction de la réponse
-        confidence_score = 0.8  # Score simulé pour le proof of concept
+        confidence_score = 0.8
         if is_blurry:
             confidence_score -= 0.2
         if is_suspicious:
             confidence_score = 0.0
-        if is_edited: # Pénalité si logiciel de retouche détecté
+        if is_edited:
             confidence_score -= 0.3
         if len(keywords_found) > 0:
             confidence_score += 0.1
             
-        confidence_score = min(max(confidence_score, 0.0), 1.0) # Clamp entre 0 et 1
+        confidence_score = min(max(confidence_score, 0.0), 1.0)
+
+        doc_type = None
+        if "diplôme" in text_lower:
+            doc_type = "Diplôme"
+        elif "certificat" in text_lower:
+            doc_type = "Certificat"
+        elif "carte" in text_lower and "identité" in text_lower:
+            doc_type = "Carte d'identité"
+
+        issuer = None
+        if "ministère" in text_lower:
+            issuer = "Ministère"
+        elif "république" in text_lower:
+            issuer = "République"
+
+        import re
+        id_numbers = re.findall(r"\b[A-Z]{1,3}\d{5,}\b", extracted_text)
+        numeric_ids = re.findall(r"\b\d{6,}\b", extracted_text)
+        id_numbers = list(set(id_numbers + numeric_ids))[:5]
+        dates = re.findall(r"\b\d{2}/\d{2}/\d{4}\b", extracted_text)
+        years = re.findall(r"\b(19|20)\d{2}\b", extracted_text)
+        dates = list(set(dates))[:5]
+        years = list(set(years))[:5]
+
+        research = {
+            "doc_type": doc_type,
+            "issuer": issuer,
+            "id_numbers": id_numbers,
+            "dates": dates,
+            "years": years,
+            "risk_flags": {
+                "edited": is_edited,
+                "suspicious_keywords": is_suspicious,
+                "blurry": is_blurry
+            }
+        }
 
         result = {
             "filename": file.filename,
@@ -123,7 +146,8 @@ async def analyze_document(file: UploadFile = File(...)):
                 "keywords_detected": keywords_found,
                 "suspicious_flags": is_suspicious,
                 "software_detected": software_detected,
-                "is_edited": is_edited
+                "is_edited": is_edited,
+                "research": research
             }
         }
         
